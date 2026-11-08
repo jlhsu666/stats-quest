@@ -75,6 +75,7 @@ check('敘述：描述統計含最高構面', nv.descriptive.includes('最高') 
 check('敘述：題項最高分', nv.items.length === 2 && nv.items.every(s => s.includes('平均數最高的題項為')));
 check('敘述：卡方含 χ²', nv.chiSquare.length >= 1 && nv.chiSquare.every(s => s.includes('χ²=')), nv.chiSquare[0]);
 check('敘述：平均數檢定含 t 或 F', nv.meanTests.length >= 1 && nv.meanTests.every(s => s.includes('t=') || s.includes('F=')), nv.meanTests[0]);
+check('敘述：事後比較方向與平均差一致（低組寫低於，不寫高於）', nv.meanTests.some(s => s.includes('「10 年以下」顯著低於「21 年以上」')) && !nv.meanTests.some(s => s.includes('「10 年以下」顯著高於')), nv.meanTests.join('｜'));
 check('敘述：關聯含相關最高與強度', nv.correlation.includes('相關最高') && (nv.correlation.includes('中度') || nv.correlation.includes('高度')), nv.correlation);
 check('敘述：迴歸含解釋力百分比', nv.regression.length === 1 && nv.regression[0].includes('整體解釋力為') && nv.regression[0].includes('%'), nv.regression[0]);
 const nv2 = data2.narratives;

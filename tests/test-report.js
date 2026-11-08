@@ -63,5 +63,21 @@ cfg2.analysis.ancova = [{ group: '任教年段', outcome: '備課成效感受', 
 const data2 = R.buildReportData(records, cfg2, {});
 check('ANCOVA 有結果且斜率同質', data2.ancova.length === 1 && data2.ancova[0].result.ok,
   data2.ancova[0] ? 'slope p=' + data2.ancova[0].result.slopeHomogeneity.p.toFixed(3) + ' group F=' + data2.ancova[0].result.groupEffect.F.toFixed(2) : 'missing');
+// ---- 第四章格式（論文慣例）：題項現況、排序、敘述文字 ----
+check('題項現況每構面 3 題有平均數與排序', data.descriptive.every(d => d.items && d.items.length === 3 && d.items.every(it => isFinite(it.mean) && it.rank >= 1 && it.rank <= 3)),
+  JSON.stringify(data.descriptive.map(d => d.items.map(it => it.mean.toFixed(2) + '#' + it.rank))));
+check('構面排序 rank 已指派', data.descriptive.every(d => d.rank >= 1 && d.rank <= 2) && data.descriptive.find(d => d.rank === 1).mean >= data.descriptive.find(d => d.rank === 2).mean);
+check('相關強度分級', R.corrStrength(0.786) === '高度正相關' && R.corrStrength(0.636) === '中度正相關' && R.corrStrength(-0.478) === '中度負相關' && R.corrStrength(0.1) === '微弱正相關');
+const nv = data.narratives;
+check('敘述：引言含 N 與節次', nv.intro.includes('有效問卷共 30 份') && nv.intro.includes('第一節 樣本基本資料分析') && nv.intro.includes('第七節 線性迴歸分析'), nv.intro);
+check('敘述：樣本含人數最多', nv.sample.includes('人數最多'));
+check('敘述：描述統計含最高構面', nv.descriptive.includes('最高') && nv.descriptive.includes("Cronbach's α"));
+check('敘述：題項最高分', nv.items.length === 2 && nv.items.every(s => s.includes('平均數最高的題項為')));
+check('敘述：卡方含 χ²', nv.chiSquare.length >= 1 && nv.chiSquare.every(s => s.includes('χ²=')), nv.chiSquare[0]);
+check('敘述：平均數檢定含 t 或 F', nv.meanTests.length >= 1 && nv.meanTests.every(s => s.includes('t=') || s.includes('F=')), nv.meanTests[0]);
+check('敘述：關聯含相關最高與強度', nv.correlation.includes('相關最高') && (nv.correlation.includes('中度') || nv.correlation.includes('高度')), nv.correlation);
+check('敘述：迴歸含解釋力百分比', nv.regression.length === 1 && nv.regression[0].includes('整體解釋力為') && nv.regression[0].includes('%'), nv.regression[0]);
+const nv2 = data2.narratives;
+check('敘述：ANCOVA 含斜率同質性', nv2.ancova.length === 1 && nv2.ancova[0].includes('斜率同質性檢定'), nv2.ancova[0]);
 console.log(fail === 0 ? 'ALL PASS' : 'FAILURES: ' + fail);
 process.exit(fail === 0 ? 0 : 1);

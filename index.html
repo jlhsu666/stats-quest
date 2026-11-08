@@ -97,7 +97,7 @@
 </div>
 
 <div id="atab-report" hidden>
-<p class="muted small">勾選要跑的分析（預設全跑）。卡方、平均數檢定、變異數分析、共變異數分析、關聯分析、線性迴歸皆由 <code>assets/stats.js</code> 計算；顯著水準 α=.05，數值顯示小數第 3 位。報告章節與表格格式待研究者提供後再對，雛形先以完整統計量呈現。</p>
+<p class="muted small">勾選要跑的分析（預設全跑）。卡方、平均數檢定、變異數分析、共變異數分析、關聯分析、線性迴歸皆由 <code>assets/stats.js</code> 計算；顯著水準 α=.05。報告格式為論文第四章（表4-節-序；平均數、標準差小數第 2 位；t、F、χ²、r、R² 小數第 3 位；p 值小數第 3 位；*p&lt;.05）。</p>
 <div class="checkrow" id="reportOpts">
 <label><input type="checkbox" id="optChi" checked> 卡方檢定</label>
 <label><input type="checkbox" id="optMean" checked> 平均數檢定／變異數分析</label>
@@ -105,7 +105,7 @@
 <label><input type="checkbox" id="optCorr" checked> 關聯分析</label>
 <label><input type="checkbox" id="optReg" checked> 線性迴歸分析</label>
 </div>
-<div><button id="btnGenReport">產生分析報告</button><button id="btnPrintReport" class="secondary">列印／存成 PDF</button><button id="btnDownloadReport" class="secondary">下載報告 HTML</button><button id="btnDownloadWord" class="secondary">下載 Word 報告（雛形格式）</button></div>
+<div><button id="btnGenReport">產生分析報告</button><button id="btnPrintReport" class="secondary">列印／存成 PDF</button><button id="btnDownloadReport" class="secondary">下載報告 HTML</button><button id="btnDownloadWord" class="secondary">下載 Word 報告</button></div>
 <div id="reportArea"></div>
 <label for="reportNotes">研究者解讀（會一併寫入下載的報告）</label>
 <textarea id="reportNotes" placeholder="在這裡寫對結果的解讀與說明……"></textarea>
@@ -122,7 +122,7 @@
 </section>
 
 </main>
-<footer>計算方法：構面分數為各題平均；信度為 Cronbach's α；卡方 χ²、獨立／成對 t 檢定（Welch 與 Student 並列）、單因子 ANOVA（η²、ω²、Bonferroni 事後比較）、ANCOVA（先檢定斜率同質性，再報調整後平均數）、Pearson／Spearman 相關、OLS 線性迴歸（R²、VIF、Durbin-Watson）。α=.05，數值顯示小數第 3 位，判定以未四捨五入值計算。</footer>
+<footer>計算方法：構面分數為各題平均；信度為 Cronbach's α；卡方 χ²、獨立／成對 t 檢定（Welch 與 Student 並列）、單因子 ANOVA（η²、ω²、Bonferroni 事後比較）、ANCOVA（先檢定斜率同質性，再報調整後平均數）、Pearson／Spearman 相關、OLS 線性迴歸（R²、VIF、Durbin-Watson）。α=.05；平均數、標準差小數第 2 位，t、F、χ²、r、R² 小數第 3 位，p 值小數第 3 位，判定以未四捨五入值計算。</footer>
 <script src="config.js"></script>
 <script src="assets/stats.js"></script>
 <script src="assets/report.js"></script>

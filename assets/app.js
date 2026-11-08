@@ -8,10 +8,21 @@
   // ---------- 小工具 ----------
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  // 論文第四章數值寫法：平均數、標準差、未標準化係數 B 取小數第 2 位；
+  // t、F、χ²、r、R²、VIF 取小數第 3 位；p 值取小數第 3 位（SPSS 式，省略前導 0，.000 表示 p<.001）；
+  // 顯著只標 *p<.05。判定一律以未四捨五入值計算。
+  function fmt2(x) { return (x === null || x === undefined || !isFinite(x)) ? '—' : (Math.round(x * 100) / 100).toFixed(2); }
   function fmt3(x) { return (x === null || x === undefined || !isFinite(x)) ? '—' : (Math.round(x * 1000) / 1000).toFixed(3); }
-  function fmtP(p) { if (p === null || p === undefined || !isFinite(p)) return '—'; if (p < 0.001) return '<.001'; return fmt3(p); }
-  function sigMark(p) { if (p === null || p === undefined || !isFinite(p)) return ''; if (p < 0.001) return '***'; if (p < 0.01) return '**'; if (p < 0.05) return '*'; return ''; }
-  function starNote() { return '<p class="small muted">* p&lt;.05，** p&lt;.01，*** p&lt;.001。數值顯示小數第 3 位，判定以未四捨五入值計算。</p>'; }
+  function fmtNoLead(x, d) { // r、p 這類絕對值不超過 1 的數值省略前導 0（.802）
+    if (x === null || x === undefined || !isFinite(x)) return '—';
+    var s = (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d);
+    if (s.charAt(0) === '0') return s.slice(1);
+    if (s.charAt(0) === '-' && s.charAt(1) === '0') return '-' + s.slice(2);
+    return s;
+  }
+  function fmtP(p) { if (p === null || p === undefined || !isFinite(p)) return '—'; if (p >= 0.9995) return '1.000'; return fmtNoLead(p, 3); }
+  function sigMark(p) { if (p === null || p === undefined || !isFinite(p)) return ''; return p < 0.05 ? '*' : ''; }
+  function starNote() { return '<p class="small muted">*p&lt;.05。</p>'; }
   function download(name, content, type) {
     var blob = new Blob([content], { type: type || 'text/plain;charset=utf-8' });
     var a = document.createElement('a');
@@ -44,6 +55,7 @@
   var adminUnlocked = false;
   var lastReportData = null;
   var lastReportHTML = '';
+  var lastReportOpts = null;
 
   function storageKey(base) { return studyId === 'default' ? base : base + '__' + studyId; }
   function localRecords() {
@@ -264,10 +276,10 @@
   function renderPreview(rec) {
     var rows = config.dimensions.map(function (dim) {
       var s = rec.scores[dim.name];
-      return '<tr><td>' + esc(dim.name) + '</td><td class="num">' + fmt3(s) + '</td><td class="num">' + dim.items.length + ' 題</td></tr>';
+      return '<tr><td>' + esc(dim.name) + '</td><td class="num">' + fmt2(s) + '</td><td class="num">' + dim.items.length + ' 題</td></tr>';
     }).join('');
     $('fillPreview').innerHTML = '<table><tr><th>構面</th><th>平均分數（1~' + config.scalePoints + '）</th><th>題數</th></tr>' + rows + '</table>' +
-      '<p class="small muted">構面分數為各題平均。確認無誤後按「送出並存檔」。</p>';
+      '<p class="small muted">構面分數為各題平均（小數第 2 位）。確認無誤後按「送出並存檔」。</p>';
     $('btnSubmit').disabled = false;
   }
 
@@ -571,13 +583,25 @@
 
   // ---------- 後台：分析報告 ----------
   function tableHTML(headers, rows) {
+    // 儲存格：數字以小數第 3 位顯示；字串原樣顯示；{ t, num } 可指定右對齊的預排文字
+    function cell(c) {
+      if (c && typeof c === 'object') return '<td' + (c.num ? ' class="num"' : '') + '>' + esc(c.t) + '</td>';
+      if (typeof c === 'number') return '<td class="num">' + fmt3(c) + '</td>';
+      return '<td>' + esc(c) + '</td>';
+    }
     return '<table><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>' +
-      rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td' + (typeof c === 'number' ? ' class="num"' : '') + '>' + (typeof c === 'number' ? fmt3(c) : esc(c)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+      rows.map(function (r) { return '<tr>' + r.map(cell).join('') + '</tr>'; }).join('') + '</table>';
   }
   function barHTML(label, value, max) {
     var pct = max ? Math.max(0, Math.min(100, value / max * 100)) : 0;
-    return '<div class="bar-row"><span class="lbl">' + esc(label) + '</span><span class="bar-track"><span class="bar-fill" style="display:block;width:' + pct.toFixed(1) + '%"></span></span><span class="v">' + fmt3(value) + '</span></div>';
+    return '<div class="bar-row"><span class="lbl">' + esc(label) + '</span><span class="bar-track"><span class="bar-fill" style="display:block;width:' + pct.toFixed(1) + '%"></span></span><span class="v">' + fmt2(value) + '</span></div>';
   }
+  // ---------- 後台：分析報告（第四章格式） ----------
+  // 章節、表號、數值位數與敘述句型依三篇碩士論文第四章慣例：
+  //   0710 學習吧國語文研究（主範本：描述統計、成對／獨立 t、ANCOVA、相關、迴歸）、
+  //   upload-2 護理在職進修 PLS-SEM（測量模型信度／效度、假說檢定）、
+  //   Pagamo 研究（樣本人數分配表；該檔案只有第一至三章，無第四章）。
+  // 表號「表4-節-序」；表頭在表上方；顯著以 *p<.05 標示於表下。
   function generateReportUI() {
     if (!records.length) { $('reportArea').innerHTML = '<p class="bad">目前沒有填答紀錄，請先填答、載入示範資料，或從 Google Sheets／檔案匯入。</p>'; return; }
     var opts = {
@@ -586,172 +610,353 @@
     };
     var data = StatsReport.buildReportData(records, config, opts);
     lastReportData = data;
+    lastReportOpts = opts;
+    var nav = data.narratives || {};
     var h = '';
-    h += '<h2>' + esc(config.studyTitle) + ' — 分析報告（雛形）</h2>';
-    h += '<p class="muted small">樣本數 N=' + data.n + '；α=.05；數值顯示小數第 3 位。報告章節與表格格式待研究者提供後再對，雛形先以完整統計量呈現。</p>';
+    h += '<h2>第四章 研究結果與討論</h2>';
+    if (nav.intro) h += '<p>' + esc(nav.intro) + '</p>';
+    h += '<p class="muted small">本報告以 α=.05 為顯著水準。表格編號採「表4-節-序」；平均數、標準差取小數第 2 位，t、F、χ²、r、R² 取小數第 3 位，p 值取小數第 3 位（.000 表示 p&lt;.001）；顯著以 *p&lt;.05 標示。</p>';
     if (data.warnings.length) h += '<div class="warn">' + data.warnings.map(esc).join('<br>') + '</div>';
-    // 樣本
-    h += '<h3>一、樣本分布</h3>';
+    // 表號計數器：每節從 1 開始；cap(節) 回傳「表4-節-序」
+    var tabN = 0;
+    function cap(sec) { tabN++; return '表4-' + sec + '-' + tabN; }
+    function capP(no, title) { return '<p class="cap">' + esc(no + ' ' + title) + '</p>'; }
+    function numCell(v, f) { return { t: (f || fmt3)(v), num: true }; }
+
+    // 第一節 樣本基本資料分析
+    h += '<h3>第一節 樣本基本資料分析</h3>';
+    if (nav.sample) h += '<p>' + esc(nav.sample) + '</p>';
+    tabN = 0;
     data.sample.groups.forEach(function (g) {
-      h += '<h4>' + esc(g.label) + '</h4>' + tableHTML(['類別', '人數', '百分比 %'], g.rows.map(function (r) { return [r.value, r.n, r.pct]; }));
+      var no = cap(1);
+      h += capP(no, g.label + '樣本分布');
+      h += tableHTML(['類別', '人數', '百分比 %'], g.rows.map(function (r) { return [r.value, { t: String(r.n), num: true }, { t: r.pct.toFixed(1), num: true }]; }));
     });
-    // 描述＋信度
-    h += '<h3>二、描述統計與信度</h3>';
-    h += tableHTML(['構面', '題數', '平均數', '標準差', '最小值', '最大值', "Cronbach's α"],
-      data.descriptive.map(function (d) { return [d.name, d.k, d.mean, d.sd, d.min, d.max, d.cronbachAlpha === null ? '—' : d.cronbachAlpha]; }));
+
+    // 第二節 描述統計與信度分析
+    h += '<h3>第二節 描述統計與信度分析</h3>';
+    tabN = 0;
+    var no21 = cap(2);
+    if (nav.descriptive) h += '<p>由' + no21 + '可知，' + esc(nav.descriptive) + '</p>';
+    h += capP(no21, '各構面描述統計與信度分析');
+    h += tableHTML(['構面', '題數', '最小值', '最大值', '平均數', '標準差', '排序', "Cronbach's α"],
+      data.descriptive.map(function (d) {
+        return [d.name, { t: String(d.k), num: true }, numCell(d.min, fmt2), numCell(d.max, fmt2), numCell(d.mean, fmt2), numCell(d.sd, fmt2), { t: String(d.rank || ''), num: true }, { t: d.cronbachAlpha === null ? '—' : fmtNoLead(d.cronbachAlpha, 3), num: true }];
+      }));
     data.descriptive.forEach(function (d) { if (d.alphaNote) h += '<p class="small warn">' + esc(d.name) + '：' + esc(d.alphaNote) + '</p>'; });
+    h += '<p class="small muted">信度判定：Cronbach\'s α≥.80 非常好；.70–.79 良好；.60–.69 可接受；&lt;.60 偏低。</p>';
+    var no22 = cap(2);
+    if (nav.items && nav.items.length) h += '<p>由' + no22 + '可知，' + nav.items.map(esc).join('') + '</p>';
+    h += capP(no22, '各題項現況分析');
+    var itemRows = [];
+    data.descriptive.forEach(function (d) {
+      (d.items || []).forEach(function (it) {
+        itemRows.push([d.name, it.item, numCell(it.mean, fmt2), numCell(it.sd, fmt2), { t: String(it.rank), num: true }]);
+      });
+    });
+    h += tableHTML(['構面', '題目', '平均數', '標準差', '排序'], itemRows);
     h += '<h4>構面平均分數</h4>' + data.descriptive.map(function (d) { return barHTML(d.name, d.mean || 0, config.scalePoints); }).join('');
-    // 卡方
+
+    // 第三節 卡方檢定
     if (opts.runChiSquare) {
-      h += '<h3>三、卡方檢定</h3>';
+      h += '<h3>第三節 卡方檢定</h3>';
+      tabN = 0;
       if (!data.chiSquare.length) h += '<p class="muted">無卡方分析（未指定且無兩個以上類別變項）。</p>';
-      data.chiSquare.forEach(function (c) {
-        h += '<h4>' + esc(c.varA) + ' × ' + esc(c.varB) + '</h4>';
-        h += tableHTML([''].concat(c.colLabels), c.rowLabels.map(function (rl, i) { return [rl].concat(c.table[i]); }));
+      data.chiSquare.forEach(function (c, ci) {
         var r = c.result;
-        h += '<p>χ²=' + fmt3(r.chi2) + '，df=' + r.df + '，p' + fmtP(r.p) + sigMark(r.p) + '，Cramer\'s V=' + fmt3(r.cramerV) + (r.phi !== null ? '，φ=' + fmt3(r.phi) : '') + '。' +
-          (r.significant ? '達顯著，兩變項有關聯。' : '未達顯著，兩變項無顯著關聯。') + '</p>';
+        var no = cap(3);
+        h += capP(no, c.varA + ' × ' + c.varB + ' 卡方檢定');
+        h += tableHTML([''].concat(c.colLabels), c.rowLabels.map(function (rl, i) { return [rl].concat(c.table[i].map(function (v) { return { t: String(v), num: true }; })); }));
+        if (nav.chiSquare && nav.chiSquare[ci]) h += '<p>由' + no + '可知，' + esc(nav.chiSquare[ci]) + '</p>';
         if (r.warnings.length) h += '<p class="small warn">' + esc(r.warnings.join('；')) + '</p>';
       });
     }
-    // 平均數檢定
+
+    // 第四節 平均數檢定
     if (opts.runMeanTests) {
-      h += '<h3>四、平均數檢定／變異數分析</h3>';
+      h += '<h3>第四節 平均數檢定</h3>';
+      tabN = 0;
       if (!data.meanTests.length) h += '<p class="muted">無平均數檢定分析。</p>';
-      data.meanTests.forEach(function (m) {
-        h += '<h4>' + esc(m.group) + ' → ' + esc(m.outcome) + '</h4>';
+      data.meanTests.forEach(function (m, mi) {
         if (m.kind === 't') {
           var t = m.result;
-          h += tableHTML(['組別', 'n', '平均數', '標準差'],
-            m.levels.map(function (lv, i) { return [lv, i === 0 ? t.n1 : t.n2, i === 0 ? t.mean1 : t.mean2, i === 0 ? t.sd1 : t.sd2]; }));
-          h += '<p>Welch t=' + fmt3(t.welch.t) + '，df=' + fmt3(t.welch.df) + '，p' + fmtP(t.welch.p) + sigMark(t.welch.p) +
-            '；Student t=' + fmt3(t.student.t) + '，df=' + t.student.df + '，p' + fmtP(t.student.p) + sigMark(t.student.p) +
-            '；平均差=' + fmt3(t.meanDiff) + '，Cohen\'s d=' + fmt3(t.cohenD) + '，Hedges\' g=' + fmt3(t.hedgesG) + '。</p>';
-          h += '<p class="small muted">Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p' + fmtP(m.levene.p) + sigMark(m.levene.p) + '。變異數不同質時以 Welch 為準。</p>';
+          var no = cap(4);
+          h += capP(no, m.group + '在' + m.outcome + '上之差異分析（獨立樣本 t 檢定）');
+          h += tableHTML(['組別', '個數', '平均數', '標準差', 't', 'p'],
+            m.levels.map(function (lv, i) {
+              var mean = i === 0 ? t.mean1 : t.mean2, sd = i === 0 ? t.sd1 : t.sd2, n = i === 0 ? t.n1 : t.n2;
+              return [lv, { t: String(n), num: true }, numCell(mean, fmt2), numCell(sd, fmt2),
+                i === 0 ? { t: fmt3(t.welch.t) + sigMark(t.welch.p), num: true } : '',
+                i === 0 ? { t: fmtP(t.welch.p), num: true } : ''];
+            }));
+          h += '<p class="small muted">Welch t=' + fmt3(t.welch.t) + '，df=' + fmt3(t.welch.df) + '，p=' + fmtP(t.welch.p) + '；Student t=' + fmt3(t.student.t) + '，df=' + t.student.df + '，p=' + fmtP(t.student.p) + '；平均差=' + fmt2(t.meanDiff) + '，Cohen\'s d=' + fmt3(t.cohenD) + '，Hedges\' g=' + fmt3(t.hedgesG) + '。</p>';
+          h += '<p class="small muted">Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p=' + fmtP(m.levene.p) + '。變異數不同質時以 Welch 為準。</p>';
+          h += starNote();
+          if (nav.meanTests && nav.meanTests[mi]) h += '<p>由' + no + '可知，' + esc(nav.meanTests[mi]) + '</p>';
         } else {
           var a = m.result;
-          h += tableHTML(['組別', 'n', '平均數', '標準差'],
-            m.levels.map(function (lv, i) { return [lv, a.groupN[i], a.groupMeans[i], a.groupSD[i]]; }));
+          var noA = cap(4);
+          h += capP(noA, m.group + '在' + m.outcome + '上之差異分析（變異數分析）');
+          h += tableHTML(['組別', '個數', '平均數', '標準差'],
+            m.levels.map(function (lv, i) { return [lv, { t: String(a.groupN[i]), num: true }, numCell(a.groupMeans[i], fmt2), numCell(a.groupSD[i], fmt2)]; }));
+          var noB = cap(4);
+          h += capP(noB, m.group + '在' + m.outcome + '上之變異數分析摘要表');
           h += tableHTML(['變異來源', 'SS', 'df', 'MS', 'F', 'p'],
-            [['組間', a.ssb, a.dfb, a.msb, a.F, a.p], ['組內', a.ssw, a.dfw, a.msw, '—', '—'], ['總和', a.sst, a.dfb + a.dfw, '—', '—', '—']]);
-          h += '<p>F=' + fmt3(a.F) + '，p' + fmtP(a.p) + sigMark(a.p) + '，η²=' + fmt3(a.eta2) + '，ω²=' + fmt3(a.omega2) + '。</p>';
-          h += '<p class="small muted">Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p' + fmtP(m.levene.p) + sigMark(m.levene.p) + '。</p>';
-          h += '<h4>事後比較（成對 t＋Bonferroni 校正；Tukey／Scheffe 待報告格式確認）</h4>';
+            [['組間', numCell(a.ssb), { t: String(a.dfb), num: true }, numCell(a.msb), { t: fmt3(a.F) + sigMark(a.p), num: true }, { t: fmtP(a.p), num: true }],
+             ['組內', numCell(a.ssw), { t: String(a.dfw), num: true }, numCell(a.msw), '', ''],
+             ['總和', numCell(a.sst), { t: String(a.dfb + a.dfw), num: true }, '', '', '']]);
+          h += starNote();
+          var noC = cap(4);
+          h += capP(noC, m.group + '在' + m.outcome + '上之事後比較');
           h += tableHTML(['比較', '平均差', 't (Welch)', 'p', 'p (Bonferroni)', "Cohen's d"],
-            a.postHoc.map(function (p) { return [m.levels[p.g1] + ' − ' + m.levels[p.g2], p.meanDiff, p.tWelch, p.pWelch, p.pBonf, p.cohenD]; }));
+            a.postHoc.map(function (p) { return [m.levels[p.g1] + ' − ' + m.levels[p.g2], numCell(p.meanDiff, fmt2), numCell(p.tWelch), { t: fmtP(p.pWelch), num: true }, { t: fmtP(p.pBonf) + sigMark(p.pBonf), num: true }, numCell(p.cohenD)]; }));
+          h += starNote();
+          h += '<p class="small muted">η²=' + fmtNoLead(a.eta2, 3) + '，ω²=' + fmtNoLead(a.omega2, 3) + '；Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p=' + fmtP(m.levene.p) + '。事後比較為成對 t＋Bonferroni 校正。</p>';
+          if (nav.meanTests && nav.meanTests[mi]) h += '<p>由' + noB + '可知，' + esc(nav.meanTests[mi]) + '</p>';
         }
       });
     }
-    // ANCOVA
+
+    // 第五節 共變異數分析
     if (opts.runAncova) {
-      h += '<h3>五、共變異數分析</h3>';
+      h += '<h3>第五節 共變異數分析</h3>';
+      tabN = 0;
       if (!data.ancova.length) h += '<p class="muted">未指定共變異數分析（須在 [分析設定] 寫「共變異數：分組 → 依變項，控制 共變項」）。</p>';
-      data.ancova.forEach(function (a) {
+      data.ancova.forEach(function (a, ai) {
         var r = a.result;
         if (!r.ok) { h += '<p class="bad">' + esc(a.group + ' → ' + a.outcome) + '：' + esc(r.error) + '</p>'; return; }
-        h += '<h4>' + esc(a.group) + ' → ' + esc(a.outcome) + '，控制 ' + esc(a.covariate) + '</h4>';
-        h += '<p>斜率同質性檢定：F=' + fmt3(r.slopeHomogeneity.F) + '，p' + fmtP(r.slopeHomogeneity.p) + sigMark(r.slopeHomogeneity.p) +
-          '（' + (r.slopeHomogeneity.homogeneous ? '同質，可續做 ANCOVA' : '不同質，不宜用同一斜率調整') + '）。</p>';
+        if (nav.ancova && nav.ancova[ai]) h += '<p>' + esc(nav.ancova[ai]) + '</p>';
+        var no = cap(5);
+        h += capP(no, a.group + '在' + a.outcome + '上之共變異數分析（控制 ' + a.covariate + '）');
         h += tableHTML(['組別', '原始平均', '調整後平均'],
-          a.levels.map(function (lv, i) { return [lv, r.groupMeans[i], r.adjMeans[i]]; }));
-        h += '<p>組別效果：F=' + fmt3(r.groupEffect.F) + '，df=' + r.groupEffect.df1 + '／' + r.groupEffect.df2 + '，p' + fmtP(r.groupEffect.p) + sigMark(r.groupEffect.p) + '，partial η²=' + fmt3(r.groupEffect.partialEta2) + '。' +
-          '共變項效果：F=' + fmt3(r.covariateEffect.F) + '，p' + fmtP(r.covariateEffect.p) + sigMark(r.covariateEffect.p) + '，partial η²=' + fmt3(r.covariateEffect.partialEta2) + '。R²=' + fmt3(r.R2) + '。</p>';
+          a.levels.map(function (lv, i) { return [lv, numCell(r.groupMeans[i], fmt2), numCell(r.adjMeans[i], fmt2)]; }));
+        h += '<p class="small muted">共變項效果：F=' + fmt3(r.covariateEffect.F) + '，p=' + fmtP(r.covariateEffect.p) + '，partial η²=' + fmtNoLead(r.covariateEffect.partialEta2, 3) + '；R²=' + fmtNoLead(r.R2, 3) + '，調整後 R²=' + fmtNoLead(r.adjR2, 3) + '。斜率同質性檢定：F=' + fmt3(r.slopeHomogeneity.F) + '，p=' + fmtP(r.slopeHomogeneity.p) + '。</p>';
       });
     }
-    // 相關
+
+    // 第六節 關聯分析
     if (opts.runCorrelation && data.correlation) {
-      h += '<h3>六、關聯分析</h3>';
+      h += '<h3>第六節 關聯分析</h3>';
+      tabN = 0;
+      var no61 = cap(6);
       var names = data.correlation.names;
-      h += '<h4>相關矩陣（Pearson r）</h4>';
-      h += tableHTML([''].concat(names), names.map(function (a) {
-        return [a].concat(names.map(function (b) {
+      h += capP(no61, '各構面 Pearson 相關矩陣');
+      h += tableHTML(['構面'].concat(names), names.map(function (a, i) {
+        return [a].concat(names.map(function (b, j) {
+          if (i === j) return { t: '1', num: true };
+          if (j > i) return '';
           var c = data.correlation.matrix[a][b];
-          return a === b ? '1.000' : fmt3(c.r) + sigMark(c.p);
+          return { t: fmtNoLead(c.r, 3) + sigMark(c.p), num: true };
         }));
       }));
-      data.correlation.pairs.forEach(function (p) {
-        h += '<p>' + esc(p.a) + ' × ' + esc(p.b) + '：Pearson r=' + fmt3(p.pearson.r) + '，p' + fmtP(p.pearson.p) + sigMark(p.pearson.p) +
-          '，95% CI [' + fmt3(p.pearson.ci95[0]) + ', ' + fmt3(p.pearson.ci95[1]) + ']；Spearman ρ=' + fmt3(p.spearman.r) + '，p' + fmtP(p.spearman.p) + sigMark(p.spearman.p) + '。</p>';
-      });
       h += starNote();
+      if (nav.correlation) h += '<p>由' + no61 + '可知，' + esc(nav.correlation) + '</p>';
+      h += '<p class="small muted">相關強度：|r|≥.70 高度相關；.40–.69 中度相關；.20–.39 低度相關；&lt;.20 微弱相關。</p>';
+      data.correlation.pairs.forEach(function (p) {
+        h += '<p>' + esc(p.a) + ' × ' + esc(p.b) + '：Pearson r=' + fmtNoLead(p.pearson.r, 3) + sigMark(p.pearson.p) + '，p=' + fmtP(p.pearson.p) +
+          '，95% CI [' + fmtNoLead(p.pearson.ci95[0], 3) + ', ' + fmtNoLead(p.pearson.ci95[1], 3) + ']；Spearman ρ=' + fmtNoLead(p.spearman.r, 3) + sigMark(p.spearman.p) + '，p=' + fmtP(p.spearman.p) + '。</p>';
+      });
     }
-    // 迴歸
+
+    // 第七節 線性迴歸分析
     if (opts.runRegression) {
-      h += '<h3>七、線性迴歸分析</h3>';
+      h += '<h3>第七節 線性迴歸分析</h3>';
+      tabN = 0;
       if (!data.regression.length) h += '<p class="muted">未指定迴歸分析（須在 [分析設定] 寫「迴歸：依變項 ← 預測變項」）。</p>';
-      data.regression.forEach(function (rg) {
+      data.regression.forEach(function (rg, ri) {
         var r = rg.result;
         if (!r.ok) { h += '<p class="bad">' + esc(rg.outcome) + '：' + esc(r.error) + '</p>'; return; }
-        h += '<h4>依變項：' + esc(rg.outcome) + ' ← ' + esc(rg.predictors.join('、')) + '</h4>';
-        h += '<p>R=' + fmt3(r.R) + '，R²=' + fmt3(r.R2) + '，調整後 R²=' + fmt3(r.adjR2) + '，F=' + fmt3(r.F) + '，p' + fmtP(r.pF) + sigMark(r.pF) + '，Durbin-Watson=' + fmt3(r.durbinWatson) + '。</p>';
-        h += tableHTML(['變項', 'B', 'SE', 'β（標準化）', 't', 'p', 'VIF'],
-          r.coefficients.map(function (c) { return [c.name, c.b, c.se, c.betaStd || '—', c.t, c.p, c.name === '(截距)' ? '—' : r.vif[c.name]]; }));
+        var no = cap(7);
+        h += capP(no, rg.outcome + '之預測分析');
+        h += tableHTML(['預測變數', '未標準化係數 B', '標準化係數 β', 't', 'p', 'VIF', 'R²', '調整後 R²', 'F'],
+          r.coefficients.map(function (c, ci) {
+            return [c.name,
+              numCell(c.b, fmt2),
+              { t: c.name === '(截距)' ? '—' : fmt2(c.betaStd), num: true },
+              { t: fmt3(c.t) + (c.name === '(截距)' ? '' : sigMark(c.p)), num: true },
+              { t: fmtP(c.p), num: true },
+              { t: c.name === '(截距)' ? '—' : fmt3(r.vif[c.name]), num: true },
+              ci === 0 ? { t: fmtNoLead(r.R2, 3), num: true } : '',
+              ci === 0 ? { t: fmtNoLead(r.adjR2, 3), num: true } : '',
+              ci === 0 ? { t: fmt3(r.F) + sigMark(r.pF), num: true } : ''];
+          }));
+        h += '<p class="small muted">*p&lt;.05，依變數：' + esc(rg.outcome) + '。Durbin-Watson=' + fmt3(r.durbinWatson) + '。</p>';
+        if (nav.regression && nav.regression[ri]) h += '<p>由' + no + '可知，' + esc(nav.regression[ri]) + '</p>';
         if (r.warnings.length) h += '<p class="small warn">' + esc(r.warnings.join('；')) + '</p>';
       });
     }
+
     var notes = $('reportNotes').value.trim();
     if (notes) h += '<h3>研究者解讀</h3><p>' + esc(notes).replace(/\n/g, '<br>') + '</p>';
     $('reportArea').innerHTML = h;
     lastReportHTML = h;
   }
 
-  // ---------- Word 下載（雛形格式，沿用 AHP 的 DocxBuilder） ----------
+  // ---------- Word 下載（第四章格式，與網頁版同結構；長條圖僅限網頁版） ----------
   function downloadWordReport() {
     if (!lastReportData) { alert('請先按「產生分析報告」。'); return; }
-    var D = DocxBuilder, data = lastReportData;
+    var D = DocxBuilder, data = lastReportData, opts = lastReportOpts || {};
+    var nav = data.narratives || {};
     var blocks = [];
-    blocks.push(D.heading1(config.studyTitle + ' — 分析報告（雛形）'));
-    blocks.push(D.bodyPara('樣本數 N=' + data.n + '；顯著水準 α=.05；數值顯示小數第 3 位。報告章節與表格格式待研究者提供後再對，雛形先以完整統計量呈現。'));
+    blocks.push(D.heading1(config.studyTitle + ' — 第四章 研究結果與討論'));
+    if (nav.intro) blocks.push(D.bodyPara(nav.intro));
+    blocks.push(D.bodyPara('本報告以 α=.05 為顯著水準。表格編號採「表4-節-序」；平均數、標準差取小數第 2 位，t、F、χ²、r、R² 取小數第 3 位，p 值取小數第 3 位（.000 表示 p<.001）；顯著以 *p<.05 標示。'));
     function tbl(headers, rows) {
       return D.table(headers.map(function (x) { return { t: String(x) }; }),
-        rows.map(function (r) { return r.map(function (c) { return { t: String(c === null || c === undefined || (typeof c === 'number' && !isFinite(c)) ? '—' : (typeof c === 'number' ? c.toFixed(3) : c)) }; }); }));
+        rows.map(function (r) { return r.map(function (c) { return { t: String(c === null || c === undefined ? '—' : c) }; }); }));
     }
-    blocks.push(D.heading2('一、樣本分布'));
+    var tabN = 0;
+    function cap(sec) { tabN++; return '表4-' + sec + '-' + tabN; }
+    function capT(no, title) { blocks.push(D.captionPara(no + ' ' + title)); }
+    function foot(t) { blocks.push(D.sourcePara(t)); }
+
+    // 第一節 樣本基本資料分析
+    blocks.push(D.heading2('第一節 樣本基本資料分析'));
+    if (nav.sample) blocks.push(D.bodyPara(nav.sample));
+    tabN = 0;
     data.sample.groups.forEach(function (g) {
-      blocks.push(D.boldPara(g.label));
-      blocks.push(tbl(['類別', '人數', '百分比 %'], g.rows.map(function (r) { return [r.value, r.n, r.pct.toFixed(1)]; })));
+      var no = cap(1);
+      capT(no, g.label + '樣本分布');
+      blocks.push(tbl(['類別', '人數', '百分比 %'], g.rows.map(function (r) { return [r.value, String(r.n), r.pct.toFixed(1)]; })));
     });
-    blocks.push(D.heading2('二、描述統計與信度'));
-    blocks.push(tbl(['構面', '題數', '平均數', '標準差', "Cronbach's α"],
-      data.descriptive.map(function (d) { return [d.name, d.k, d.mean, d.sd, d.cronbachAlpha === null ? '—' : d.cronbachAlpha]; })));
-    if (data.chiSquare.length) {
-      blocks.push(D.heading2('三、卡方檢定'));
-      data.chiSquare.forEach(function (c) {
-        blocks.push(D.boldPara(c.varA + ' × ' + c.varB));
-        blocks.push(D.bodyPara('χ²=' + fmt3(c.result.chi2) + '，df=' + c.result.df + '，p' + fmtP(c.result.p) + sigMark(c.result.p) + '，Cramer\'s V=' + fmt3(c.result.cramerV) + '。'));
+
+    // 第二節 描述統計與信度分析
+    blocks.push(D.heading2('第二節 描述統計與信度分析'));
+    tabN = 0;
+    var no21 = cap(2);
+    if (nav.descriptive) blocks.push(D.bodyPara('由' + no21 + '可知，' + nav.descriptive));
+    capT(no21, '各構面描述統計與信度分析');
+    blocks.push(tbl(['構面', '題數', '最小值', '最大值', '平均數', '標準差', '排序', "Cronbach's α"],
+      data.descriptive.map(function (d) { return [d.name, String(d.k), fmt2(d.min), fmt2(d.max), fmt2(d.mean), fmt2(d.sd), String(d.rank || ''), d.cronbachAlpha === null ? '—' : fmtNoLead(d.cronbachAlpha, 3)]; })));
+    data.descriptive.forEach(function (d) { if (d.alphaNote) blocks.push(D.bodyPara(d.name + '：' + d.alphaNote)); });
+    var no22 = cap(2);
+    if (nav.items && nav.items.length) blocks.push(D.bodyPara('由' + no22 + '可知，' + nav.items.join('')));
+    capT(no22, '各題項現況分析');
+    var itemRows = [];
+    data.descriptive.forEach(function (d) { (d.items || []).forEach(function (it) { itemRows.push([d.name, it.item, fmt2(it.mean), fmt2(it.sd), String(it.rank)]); }); });
+    blocks.push(tbl(['構面', '題目', '平均數', '標準差', '排序'], itemRows));
+
+    // 第三節 卡方檢定
+    if (opts.runChiSquare) {
+      blocks.push(D.heading2('第三節 卡方檢定'));
+      tabN = 0;
+      data.chiSquare.forEach(function (c, ci) {
+        var no = cap(3);
+        capT(no, c.varA + ' × ' + c.varB + ' 卡方檢定');
+        blocks.push(tbl([''].concat(c.colLabels), c.rowLabels.map(function (rl, i) { return [rl].concat(c.table[i].map(function (v) { return String(v); })); })));
+        if (nav.chiSquare && nav.chiSquare[ci]) blocks.push(D.bodyPara('由' + no + '可知，' + nav.chiSquare[ci]));
       });
     }
-    if (data.meanTests.length) {
-      blocks.push(D.heading2('四、平均數檢定／變異數分析'));
-      data.meanTests.forEach(function (m) {
+
+    // 第四節 平均數檢定
+    if (opts.runMeanTests) {
+      blocks.push(D.heading2('第四節 平均數檢定'));
+      tabN = 0;
+      data.meanTests.forEach(function (m, mi) {
         if (m.kind === 't') {
-          blocks.push(D.bodyPara(m.group + ' → ' + m.outcome + '：Welch t=' + fmt3(m.result.welch.t) + '，p' + fmtP(m.result.welch.p) + sigMark(m.result.welch.p) + '，Cohen\'s d=' + fmt3(m.result.cohenD) + '。'));
+          var t = m.result;
+          var no = cap(4);
+          capT(no, m.group + '在' + m.outcome + '上之差異分析（獨立樣本 t 檢定）');
+          blocks.push(tbl(['組別', '個數', '平均數', '標準差', 't', 'p'],
+            m.levels.map(function (lv, i) {
+              var mean = i === 0 ? t.mean1 : t.mean2, sd = i === 0 ? t.sd1 : t.sd2, n = i === 0 ? t.n1 : t.n2;
+              return [lv, String(n), fmt2(mean), fmt2(sd), i === 0 ? fmt3(t.welch.t) + sigMark(t.welch.p) : '', i === 0 ? fmtP(t.welch.p) : ''];
+            })));
+          foot('*p<0.05。');
+          blocks.push(D.bodyPara('Welch t=' + fmt3(t.welch.t) + '，df=' + fmt3(t.welch.df) + '，p=' + fmtP(t.welch.p) + '；Student t=' + fmt3(t.student.t) + '，df=' + t.student.df + '，p=' + fmtP(t.student.p) + '；平均差=' + fmt2(t.meanDiff) + '，Cohen\'s d=' + fmt3(t.cohenD) + '。Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p=' + fmtP(m.levene.p) + '。變異數不同質時以 Welch 為準。'));
+          if (nav.meanTests && nav.meanTests[mi]) blocks.push(D.bodyPara('由' + no + '可知，' + nav.meanTests[mi]));
         } else {
-          blocks.push(D.bodyPara(m.group + ' → ' + m.outcome + '：F=' + fmt3(m.result.F) + '，p' + fmtP(m.result.p) + sigMark(m.result.p) + '，η²=' + fmt3(m.result.eta2) + '。'));
+          var a = m.result;
+          var noA = cap(4);
+          capT(noA, m.group + '在' + m.outcome + '上之差異分析（變異數分析）');
+          blocks.push(tbl(['組別', '個數', '平均數', '標準差'],
+            m.levels.map(function (lv, i) { return [lv, String(a.groupN[i]), fmt2(a.groupMeans[i]), fmt2(a.groupSD[i])]; })));
+          var noB = cap(4);
+          capT(noB, m.group + '在' + m.outcome + '上之變異數分析摘要表');
+          blocks.push(tbl(['變異來源', 'SS', 'df', 'MS', 'F', 'p'],
+            [['組間', fmt3(a.ssb), String(a.dfb), fmt3(a.msb), fmt3(a.F) + sigMark(a.p), fmtP(a.p)],
+             ['組內', fmt3(a.ssw), String(a.dfw), fmt3(a.msw), '', ''],
+             ['總和', fmt3(a.sst), String(a.dfb + a.dfw), '', '', '']]));
+          foot('*p<0.05。');
+          var noC = cap(4);
+          capT(noC, m.group + '在' + m.outcome + '上之事後比較');
+          blocks.push(tbl(['比較', '平均差', 't (Welch)', 'p', 'p (Bonferroni)', "Cohen's d"],
+            a.postHoc.map(function (p) { return [m.levels[p.g1] + ' − ' + m.levels[p.g2], fmt2(p.meanDiff), fmt3(p.tWelch), fmtP(p.pWelch), fmtP(p.pBonf) + sigMark(p.pBonf), fmt3(p.cohenD)]; })));
+          foot('*p<0.05。');
+          blocks.push(D.bodyPara('η²=' + fmtNoLead(a.eta2, 3) + '，ω²=' + fmtNoLead(a.omega2, 3) + '；Levene 同質性檢定：F=' + fmt3(m.levene.F) + '，p=' + fmtP(m.levene.p) + '。事後比較為成對 t＋Bonferroni 校正。'));
+          if (nav.meanTests && nav.meanTests[mi]) blocks.push(D.bodyPara('由' + noB + '可知，' + nav.meanTests[mi]));
         }
       });
     }
-    if (data.ancova.length) {
-      blocks.push(D.heading2('五、共變異數分析'));
-      data.ancova.forEach(function (a) {
-        if (a.result.ok) blocks.push(D.bodyPara(a.group + ' → ' + a.outcome + '（控制 ' + a.covariate + '）：組別 F=' + fmt3(a.result.groupEffect.F) + '，p' + fmtP(a.result.groupEffect.p) + sigMark(a.result.groupEffect.p) + '；斜率同質 p' + fmtP(a.result.slopeHomogeneity.p) + '。'));
+
+    // 第五節 共變異數分析
+    if (opts.runAncova) {
+      blocks.push(D.heading2('第五節 共變異數分析'));
+      tabN = 0;
+      data.ancova.forEach(function (a, ai) {
+        var r = a.result;
+        if (!r.ok) { blocks.push(D.bodyPara(a.group + ' → ' + a.outcome + '：' + r.error)); return; }
+        if (nav.ancova && nav.ancova[ai]) blocks.push(D.bodyPara(nav.ancova[ai]));
+        var no = cap(5);
+        capT(no, a.group + '在' + a.outcome + '上之共變異數分析（控制 ' + a.covariate + '）');
+        blocks.push(tbl(['組別', '原始平均', '調整後平均'],
+          a.levels.map(function (lv, i) { return [lv, fmt2(r.groupMeans[i]), fmt2(r.adjMeans[i])]; })));
+        blocks.push(D.bodyPara('共變項效果：F=' + fmt3(r.covariateEffect.F) + '，p=' + fmtP(r.covariateEffect.p) + '，partial η²=' + fmtNoLead(r.covariateEffect.partialEta2, 3) + '；R²=' + fmtNoLead(r.R2, 3) + '，調整後 R²=' + fmtNoLead(r.adjR2, 3) + '。斜率同質性檢定：F=' + fmt3(r.slopeHomogeneity.F) + '，p=' + fmtP(r.slopeHomogeneity.p) + '。'));
       });
     }
-    if (data.correlation) {
-      blocks.push(D.heading2('六、關聯分析'));
+
+    // 第六節 關聯分析
+    if (opts.runCorrelation && data.correlation) {
+      blocks.push(D.heading2('第六節 關聯分析'));
+      tabN = 0;
+      var no61 = cap(6);
+      var names = data.correlation.names;
+      capT(no61, '各構面 Pearson 相關矩陣');
+      blocks.push(tbl(['構面'].concat(names), names.map(function (a, i) {
+        return [a].concat(names.map(function (b, j) {
+          if (i === j) return '1';
+          if (j > i) return '';
+          var c = data.correlation.matrix[a][b];
+          return fmtNoLead(c.r, 3) + sigMark(c.p);
+        }));
+      })));
+      foot('*p<0.05。');
+      if (nav.correlation) blocks.push(D.bodyPara('由' + no61 + '可知，' + nav.correlation));
       data.correlation.pairs.forEach(function (p) {
-        blocks.push(D.bodyPara(p.a + ' × ' + p.b + '：Pearson r=' + fmt3(p.pearson.r) + '，p' + fmtP(p.pearson.p) + sigMark(p.pearson.p) + '。'));
+        blocks.push(D.bodyPara(p.a + ' × ' + p.b + '：Pearson r=' + fmtNoLead(p.pearson.r, 3) + sigMark(p.pearson.p) + '，p=' + fmtP(p.pearson.p) + '；Spearman ρ=' + fmtNoLead(p.spearman.r, 3) + sigMark(p.spearman.p) + '，p=' + fmtP(p.spearman.p) + '。'));
       });
     }
-    if (data.regression.length) {
-      blocks.push(D.heading2('七、線性迴歸分析'));
-      data.regression.forEach(function (rg) {
-        if (rg.result.ok) blocks.push(D.bodyPara('依變項 ' + rg.outcome + '：R²=' + fmt3(rg.result.R2) + '，F=' + fmt3(rg.result.F) + '，p' + fmtP(rg.result.pF) + sigMark(rg.result.pF) + '。'));
+
+    // 第七節 線性迴歸分析
+    if (opts.runRegression) {
+      blocks.push(D.heading2('第七節 線性迴歸分析'));
+      tabN = 0;
+      data.regression.forEach(function (rg, ri) {
+        var r = rg.result;
+        if (!r.ok) { blocks.push(D.bodyPara(rg.outcome + '：' + r.error)); return; }
+        var no = cap(7);
+        capT(no, rg.outcome + '之預測分析');
+        blocks.push(tbl(['預測變數', '未標準化係數 B', '標準化係數 β', 't', 'p', 'VIF', 'R²', '調整後 R²', 'F'],
+          r.coefficients.map(function (c, ci) {
+            return [c.name,
+              fmt2(c.b),
+              c.name === '(截距)' ? '—' : fmt2(c.betaStd),
+              fmt3(c.t) + (c.name === '(截距)' ? '' : sigMark(c.p)),
+              fmtP(c.p),
+              c.name === '(截距)' ? '—' : fmt3(r.vif[c.name]),
+              ci === 0 ? fmtNoLead(r.R2, 3) : '',
+              ci === 0 ? fmtNoLead(r.adjR2, 3) : '',
+              ci === 0 ? fmt3(r.F) + sigMark(r.pF) : ''];
+          })));
+        foot('*p<0.05，依變數：' + rg.outcome + '。');
+        if (nav.regression && nav.regression[ri]) blocks.push(D.bodyPara('由' + no + '可知，' + nav.regression[ri]));
       });
     }
-    var notes = $('reportNotes').value.trim();
+
+    var notes = ($('reportNotes').value || '').trim();
     if (notes) { blocks.push(D.heading2('研究者解讀')); blocks.push(D.bodyPara(notes)); }
-    downloadBinary('stats_report.docx', D.buildDocx(blocks, config.studyTitle + ' 分析報告'));
+    // buildDocx 回傳 Uint8Array（zip 位元組），須經 downloadBinary 包成 Blob 才能下載
+    downloadBinary('stats_report.docx', D.buildDocx(blocks, config.studyTitle + ' — 第四章 研究結果與討論'));
   }
 
   // ---------- 後台：研究設定 ----------

@@ -266,7 +266,7 @@
         nav.meanTests.push('「' + m.group + '」在「' + m.outcome + '」上的差異' +
           (a.significant ? '達顯著' : '未達顯著') + '（F=' + n3(a.F) + '，' + pWord(a.p) + '）' +
           (a.significant
-            ? (sigPairs.length ? '。事後比較顯示' + sigPairs.map(function (p) { return '「' + m.levels[p.g1] + '」顯著高於「' + m.levels[p.g2] + '」'; }).join('、') : '，但事後比較未發現組間達顯著差異')
+            ? (sigPairs.length ? '。事後比較顯示' + sigPairs.map(function (p) { return '「' + m.levels[p.g1] + '」顯著' + (p.meanDiff >= 0 ? '高於' : '低於') + '「' + m.levels[p.g2] + '」'; }).join('、') : '，但事後比較未發現組間達顯著差異')
             : '，顯示各組在「' + m.outcome + '」上無顯著差異') + '。');
       }
     });

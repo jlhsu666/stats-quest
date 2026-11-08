@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>統計量化問卷與分析系統</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header><div class="wrap">
+<div><h1 id="siteTitle">統計量化問卷與分析系統</h1><p id="siteSubtitle">Likert 量表 · 填答、存檔、後台分析</p></div>
+<nav>
+<button data-view="fill" class="active">填答問卷</button>
+<button data-view="admin">管理後台</button>
+</nav>
+</div></header>
+
+<main>
+<!-- ================= 填答 ================= -->
+<section id="view-fill">
+<div class="card" id="fillIntro"></div>
+<div class="card">
+<h2>第一步：基本資料（匿名，僅供分組分析）</h2>
+<div class="grid">
+<div><label for="fCode">填答編號（可自填，例如 T01；留空由系統編號）</label><input id="fCode" type="text" placeholder="例如 T01"></div>
+<div id="fGroupWrap"><label id="fGroupLabel" for="fGroup">分組</label><select id="fGroup"></select></div>
+</div>
+<div class="grid" id="fBackground"></div>
+<p class="muted small">提醒：請勿填寫姓名、電話、電子郵件等可識別個人的資料。本問卷只記錄上面這些分組欄位與各題分數。</p>
+</div>
+
+<div class="card">
+<h2>第二步：量表填答（<span id="scaleHint">5 點量表</span>）</h2>
+<p class="muted">請依您的實際感受勾選，每題都要作答。分數越高表示越同意該敘述；構面分數為該構面各題的平均分數。</p>
+<div class="progress"><i id="fillProgress" style="width:0%"></i></div>
+<p class="small muted" id="fillProgressText"></p>
+<div id="fillDims"></div>
+</div>
+
+<div class="card">
+<h2>第三步：我的構面分數預覽</h2>
+<p class="muted">先看自己的各構面平均分數，確認無誤再送出。送出後會寫入 Google Sheets（或本機模式下存在填答者瀏覽器）。</p>
+<button id="btnPreview">計算我的構面分數</button>
+<div id="fillPreview"></div>
+<button id="btnSubmit" disabled>送出並存檔</button>
+<span id="submitStatus" class="small muted"></span>
+<div id="fillDone"></div>
+</div>
+</section>
+
+<!-- ================= 後台 ================= -->
+<section id="view-admin" hidden>
+<div class="card" id="adminLock">
+<h2>管理後台</h2>
+<p class="muted">請輸入研究者設定的後台密碼（預設研究在 config.js，多研究在各研究題目檔的「後台密碼」）。這個密碼只是簡易門檻，不是真正的帳號驗證；請勿用它保護高度敏感資料，重要研究請把 repo 設為私人、並用匿名編號填答。</p>
+<label for="adminCodeInput">後台密碼</label><input id="adminCodeInput" type="password" autocomplete="off">
+<button id="btnAdminUnlock">進入後台</button>
+<p id="adminLockMsg" class="small bad"></p>
+<div id="adminWarn"></div>
+</div>
+
+<div id="adminBody" hidden>
+<div class="card">
+<h2>資料來源</h2>
+<div class="tabs" role="tablist">
+<button data-src="local" class="active">本機紀錄</button>
+<button data-src="sheet">Google Sheets</button>
+<button data-src="import">匯入檔案</button>
+</div>
+<p class="muted small" id="srcHint"></p>
+<div id="srcControls"></div>
+<button id="btnLoadDemo" class="secondary">載入示範資料（24 筆合成資料，非真實問卷，僅供測試報告格式）</button>
+<button id="btnClearLocal" class="secondary danger">清除本機紀錄</button>
+</div>
+
+<div class="card">
+<div class="tabs">
+<button data-atab="records" class="active">填答紀錄</button>
+<button data-atab="report">分析報告</button>
+<button data-atab="settings">研究設定</button>
+</div>
+
+<div id="atab-records">
+<p class="muted small">點「查看」可看該筆的各題分數與構面分數。下載的 raw data 包含原始各題分數，可直接進 Excel、SPSS、JASP 或 R 再分析。</p>
+<label>篩選</label>
+<div class="grid">
+<div><select id="recGroupFilter"></select></div>
+<div><input id="recSearch" type="text" placeholder="搜尋編號"></div>
+</div>
+<div id="recSummary" class="small muted"></div>
+<div id="recTable"></div>
+<div id="recDetail"></div>
+<h3>下載 Raw Data</h3>
+<button id="btnCsvRaw">下載原始填答 CSV</button>
+<button id="btnCsvScores">下載構面分數 CSV</button>
+<button id="btnJson">下載完整 JSON</button>
+</div>
+
+<div id="atab-report" hidden>
+<p class="muted small">勾選要跑的分析（預設全跑）。卡方、平均數檢定、變異數分析、共變異數分析、關聯分析、線性迴歸皆由 <code>assets/stats.js</code> 計算；顯著水準 α=.05，數值顯示小數第 3 位。報告章節與表格格式待研究者提供後再對，雛形先以完整統計量呈現。</p>
+<div class="checkrow" id="reportOpts">
+<label><input type="checkbox" id="optChi" checked> 卡方檢定</label>
+<label><input type="checkbox" id="optMean" checked> 平均數檢定／變異數分析</label>
+<label><input type="checkbox" id="optAncova" checked> 共變異數分析</label>
+<label><input type="checkbox" id="optCorr" checked> 關聯分析</label>
+<label><input type="checkbox" id="optReg" checked> 線性迴歸分析</label>
+</div>
+<div><button id="btnGenReport">產生分析報告</button><button id="btnPrintReport" class="secondary">列印／存成 PDF</button><button id="btnDownloadReport" class="secondary">下載報告 HTML</button><button id="btnDownloadWord" class="secondary">下載 Word 報告（雛形格式）</button></div>
+<div id="reportArea"></div>
+<label for="reportNotes">研究者解讀（會一併寫入下載的報告）</label>
+<textarea id="reportNotes" placeholder="在這裡寫對結果的解讀與說明……"></textarea>
+</div>
+
+<div id="atab-settings" hidden>
+<p class="muted">這裡顯示目前研究的架構（來自題目檔或 config.js）。要正式更換研究架構，請改題目檔或按「下載新的 config.js」，覆蓋 repo 裡的 config.js 後重新部署。</p>
+<div id="settingsEditor"></div>
+<button id="btnDownloadConfig" class="secondary">下載新的 config.js</button>
+<div id="settingsMsg" class="small muted"></div>
+</div>
+</div>
+</div>
+</section>
+
+</main>
+<footer>計算方法：構面分數為各題平均；信度為 Cronbach's α；卡方 χ²、獨立／成對 t 檢定（Welch 與 Student 並列）、單因子 ANOVA（η²、ω²、Bonferroni 事後比較）、ANCOVA（先檢定斜率同質性，再報調整後平均數）、Pearson／Spearman 相關、OLS 線性迴歸（R²、VIF、Durbin-Watson）。α=.05，數值顯示小數第 3 位，判定以未四捨五入值計算。</footer>
+<script src="config.js"></script>
+<script src="assets/stats.js"></script>
+<script src="assets/report.js"></script>
+<script src="assets/docx.js"></script>
+<script src="assets/studyTxt.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

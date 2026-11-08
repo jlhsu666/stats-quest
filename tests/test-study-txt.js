@@ -27,6 +27,13 @@ check('半形標點解析 ok', r2.ok, JSON.stringify(r2.errors));
 const bad1 = tpl + '\n[分析設定]\n卡方：AI 工具態度 × 性別\n';
 const rb1 = S.parse(bad1);
 check('卡方用構面名應報錯', !rb1.ok && rb1.errors.some(e => e.message.includes('卡方')));
+// 量表：4 點不寫標籤 → 預設中文標籤（不是數字）；7 點亦同
+const t4 = tpl.replace('量表點數：5', '量表點數：4').replace('量表標籤：非常不同意, 不同意, 普通, 同意, 非常同意', '');
+const r4 = S.parse(t4);
+check('4 點無標籤用預設中文標籤', r4.ok && r4.config.scaleLabels.join(',') === '非常不同意,不同意,同意,非常同意', JSON.stringify(r4.errors));
+const t7 = tpl.replace('量表點數：5', '量表點數：7').replace('量表標籤：非常不同意, 不同意, 普通, 同意, 非常同意', '');
+const r7 = S.parse(t7);
+check('7 點無標籤用預設中文標籤', r7.ok && r7.config.scaleLabels.length === 7 && r7.config.scaleLabels[3] === '普通', JSON.stringify(r7.errors));
 // 錯誤案例：量表標籤數量不符
 const bad2 = tpl.replace('量表標籤：非常不同意, 不同意, 普通, 同意, 非常同意', '量表標籤：不同意, 同意');
 const rb2 = S.parse(bad2);

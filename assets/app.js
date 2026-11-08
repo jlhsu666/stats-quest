@@ -185,8 +185,8 @@
         f.options.map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
       bg.appendChild(d);
     });
-    // 量表題
-    $('scaleHint').textContent = config.scalePoints + ' 點量表（1=' + config.scaleLabels[0] + '，' + config.scalePoints + '=' + config.scaleLabels[config.scalePoints - 1] + '）';
+    // 量表題（選項只顯示文字標籤，不顯示數字；分數仍為 1~scalePoints）
+    $('scaleHint').textContent = config.scalePoints + ' 點量表（' + config.scaleLabels[0] + '～' + config.scaleLabels[config.scalePoints - 1] + '）';
     var dims = $('fillDims'); dims.innerHTML = '';
     config.dimensions.forEach(function (dim, di) {
       var h = document.createElement('h3');
@@ -204,7 +204,7 @@
         for (var v = 1; v <= config.scalePoints; v++) {
           (function (val) {
             var lab = document.createElement('label');
-            lab.innerHTML = '<input type="radio" name="q-' + di + '-' + ii + '" value="' + val + '"><span class="lv">' + val + '</span><span class="lb">' + esc(config.scaleLabels[val - 1] || '') + '</span>';
+            lab.innerHTML = '<input type="radio" name="q-' + di + '-' + ii + '" value="' + val + '"><span class="lb">' + esc(config.scaleLabels[val - 1] || '') + '</span>';
             lab.addEventListener('click', function () {
               setTimeout(function () {
                 lik.querySelectorAll('label').forEach(function (l) { l.classList.remove('on'); });
@@ -534,12 +534,13 @@
   function generateDemo() {
     var rnd = mulberry32(20261108);
     function gauss() { var u = Math.max(1e-9, rnd()), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
-    function clampRound(x) { return Math.max(1, Math.min(5, Math.round(x))); }
+    var sp = config.scalePoints || 5;
+    function clampRound(x) { return Math.max(1, Math.min(sp, Math.round(x))); }
     var groups = ['低年級', '中年級', '高年級'];
     var list = [];
     for (var i = 0; i < 24; i++) {
       var gi = i % 3, grp = groups[gi];
-      var attLatent = [3.2, 3.6, 4.0][gi] + gauss() * 0.5;
+      var attLatent = [3.2, 3.6, 4.0][gi] * sp / 5 + gauss() * 0.5;
       var effLatent = 0.8 + 0.65 * attLatent + gauss() * 0.4;
       var responses = {};
       [attLatent, effLatent].forEach(function (lat, di) {
@@ -754,6 +755,11 @@
   }
 
   // ---------- 後台：研究設定 ----------
+  function defaultScaleLabels(n) {
+    var m = (typeof StudyTxt !== 'undefined' && StudyTxt.DEFAULT_LABELS) ? StudyTxt.DEFAULT_LABELS : null;
+    if (m && m[n]) return m[n].slice();
+    return Array.from({ length: n }, function (_, i) { return String(i + 1); });
+  }
   function renderSettings() {
     var h = '<table><tr><th>項目</th><th>內容</th></tr>' +
       '<tr><td>研究標題</td><td>' + esc(config.studyTitle) + '</td></tr>' +
@@ -763,10 +769,70 @@
       '<tr><td>量表</td><td>' + config.scalePoints + ' 點：' + esc(config.scaleLabels.join('、')) + '</td></tr>' +
       '<tr><td>構面</td><td>' + config.dimensions.map(function (d) { return esc(d.name) + '（' + d.items.length + ' 題）'; }).join('<br>') + '</td></tr>' +
       '<tr><td>Apps Script</td><td>' + (config.appsScriptUrl ? esc(config.appsScriptUrl) : '（未填，本機模式）') + '</td></tr></table>';
+    h += '<h3>量表設定</h3>' +
+      '<p class="small muted">幾點量表與每個選項的文字都可以改，預設 5 點（非常不同意、不同意、普通、同意、非常同意）。改完先存到本機測試；正式生效請把下面兩行貼進題目檔（studies/*.txt）再推上 GitHub。注意：已填答紀錄的分數是舊點數算的，改點數後請重新填答或重新產生示範資料。</p>' +
+      '<label for="setScalePoints">量表點數</label>' +
+      '<select id="setScalePoints">' + [2, 3, 4, 5, 6, 7].map(function (n) { return '<option value="' + n + '"' + (n === config.scalePoints ? ' selected' : '') + '>' + n + ' 點</option>'; }).join('') + '</select>' +
+      '<div id="setScaleLabelsWrap"></div>' +
+      '<button id="btnSaveScale" class="secondary">儲存量表設定（本機測試）</button> <span class="small" id="settingsScaleMsg"></span>' +
+      '<pre class="small" id="setScaleTxt"></pre>';
     h += '<h3>分析設定</h3><pre class="small">' + esc(JSON.stringify(config.analysis || {}, null, 2)) + '</pre>';
     h += '<label for="settingsIntro">問卷說明（改完只存到本機測試，正式更換請改題目檔）</label><textarea id="settingsIntro">' + esc(config.intro || '') + '</textarea>' +
       '<button id="btnSaveIntro" class="secondary">只存到本機測試</button>';
     $('settingsEditor').innerHTML = h;
+    // 量表編輯器：點數一改，選項輸入框跟著增減（未客製時換新點數預設；已客製則沿用文字）
+    function renderScaleLabelInputs(n, labels) {
+      var html = '<label>選項文字（由左至右，共 ' + n + ' 個）</label>';
+      for (var i = 0; i < n; i++) {
+        html += '<label for="setScaleLabel' + i + '" class="small">第 ' + (i + 1) + ' 個選項</label>' +
+          '<input type="text" id="setScaleLabel' + i + '" value="' + esc(labels[i] || '') + '">';
+      }
+      $('setScaleLabelsWrap').innerHTML = html;
+    }
+    function readScaleLabels() {
+      var labs = [];
+      $('setScaleLabelsWrap').querySelectorAll('input').forEach(function (el) { labs.push(el.value.trim()); });
+      return labs;
+    }
+    function updateScaleTxtPreview() {
+      var n = parseInt($('setScalePoints').value, 10);
+      $('setScaleTxt').textContent = '題目檔寫法（貼進 studies/*.txt）：\n量表點數：' + n + '\n量表標籤：' + readScaleLabels().join(', ');
+    }
+    renderScaleLabelInputs(config.scalePoints, config.scaleLabels);
+    updateScaleTxtPreview();
+    $('setScaleLabelsWrap').addEventListener('input', updateScaleTxtPreview);
+    $('setScalePoints').addEventListener('change', function () {
+      var n = parseInt($('setScalePoints').value, 10);
+      var cur = readScaleLabels();
+      // 若目前標籤就是舊點數的預設（未客製），直接換成新點數的預設——
+      // 各點數中點意義不同（5 點第 3 個是「普通」，4 點沒有中立項），不能只截掉尾巴。
+      // 若已客製過，盡量沿用已填文字，不足的補新點數預設。
+      var oldDef = defaultScaleLabels(config.scalePoints);
+      var isDefault = cur.length === oldDef.length && cur.every(function (x, i) { return x === oldDef[i]; });
+      var next;
+      if (isDefault) next = defaultScaleLabels(n);
+      else {
+        next = cur.slice(0, n);
+        var def = defaultScaleLabels(n);
+        for (var j = 0; j < n; j++) if (!next[j]) next[j] = def[j] || '';
+      }
+      renderScaleLabelInputs(n, next);
+      updateScaleTxtPreview();
+    });
+    $('btnSaveScale').addEventListener('click', function () {
+      var n = parseInt($('setScalePoints').value, 10);
+      var labs = readScaleLabels();
+      if (labs.length !== n) { $('settingsScaleMsg').textContent = '選項數量與點數不符，請重新整理頁面再試。'; return; }
+      if (labs.some(function (x) { return !x; })) { $('settingsScaleMsg').textContent = '每個選項文字都要填，不可空白。'; return; }
+      if (new Set(labs).size !== labs.length) { $('settingsScaleMsg').textContent = '選項文字不可重複。'; return; }
+      var ov = loadOverride() || {};
+      ov.scalePoints = n; ov.scaleLabels = labs;
+      localStorage.setItem(storageKey('stats_config_override'), JSON.stringify(ov));
+      config.scalePoints = n; config.scaleLabels = labs;
+      renderFill();
+      renderSettings();
+      $('settingsScaleMsg').textContent = '已存到本機測試（重新整理後仍有效）。正式生效請把上方題目檔寫法貼進 studies/*.txt 再推上 GitHub。';
+    });
     $('btnSaveIntro').addEventListener('click', function () {
       var ov = loadOverride() || {};
       ov.intro = $('settingsIntro').value;

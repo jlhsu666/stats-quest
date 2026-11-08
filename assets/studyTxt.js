@@ -30,7 +30,16 @@
     '量表標籤': 'scaleLabels', 'scaleLabels': 'scaleLabels'
   };
   var DEFAULT_PASSWORD = '123456';
-  var DEFAULT_LABELS_5 = ['非常不同意', '不同意', '普通', '同意', '非常同意'];
+  // 各點數的預設選項文字（由最不同意到最同意）；沒寫「量表標籤」時就用這組，
+  // 選項只顯示文字，不顯示數字。
+  var DEFAULT_LABELS = {
+    2: ['不同意', '同意'],
+    3: ['不同意', '普通', '同意'],
+    4: ['非常不同意', '不同意', '同意', '非常同意'],
+    5: ['非常不同意', '不同意', '普通', '同意', '非常同意'],
+    6: ['非常不同意', '不同意', '有點不同意', '有點同意', '同意', '非常同意'],
+    7: ['非常不同意', '不同意', '有點不同意', '普通', '有點同意', '同意', '非常同意']
+  };
 
   function splitList(s) {
     return String(s).split(/[,，、]/).map(function (x) { return x.trim(); }).filter(Boolean);
@@ -55,7 +64,7 @@
       studyTitle: '', studySubtitle: '統計量化問卷（Likert 五點量表）',
       appsScriptUrl: '', adminCode: '',
       groupLabel: '', groupOptions: [],
-      scalePoints: 5, scaleLabels: DEFAULT_LABELS_5.slice(),
+      scalePoints: 5, scaleLabels: DEFAULT_LABELS[5].slice(),
       backgroundFields: [], dimensions: [], intro: '',
       analysis: { chiSquare: [], meanTests: [], ancova: [], regression: [], correlation: [] }
     };
@@ -226,12 +235,11 @@
       while (d.itemDescs.length < d.items.length) d.itemDescs.push('');
       d.itemDescs = d.itemDescs.slice(0, d.items.length);
     });
-    // 量表標籤與點數一致；5 點未給標籤時用預設中文標籤，其餘點數用數字。
+    // 量表標籤與點數一致；未給標籤時用該點數的預設中文標籤（2~7 點都有）。
     if (scaleLabelsGiven && cfg.scaleLabels.length !== cfg.scalePoints) {
       errors.push({ line: 0, message: '量表標籤共 ' + cfg.scaleLabels.length + ' 個，但量表點數是 ' + cfg.scalePoints + '，兩邊數量要相同。' });
     } else if (!scaleLabelsGiven) {
-      cfg.scaleLabels = cfg.scalePoints === 5 ? DEFAULT_LABELS_5.slice()
-        : Array.from({ length: cfg.scalePoints }, function (_, i) { return String(i + 1); });
+      cfg.scaleLabels = (DEFAULT_LABELS[cfg.scalePoints] || []).slice();
     }
     if (!cfg.appsScriptUrl) warnings.push({ line: 0, message: '未填「Apps Script 網址」，此研究為本機模式：填答只存在填答者瀏覽器，不寫入試算表。' });
     if (cfg.adminCode === DEFAULT_PASSWORD) warnings.push({ line: 0, message: '後台密碼還是預設值，請改成自己的密碼再發連結。' });
@@ -240,7 +248,7 @@
     return { ok: errors.length === 0, config: cfg, errors: errors, warnings: warnings };
   }
 
-  var api = { parse: parse, DEFAULT_PASSWORD: DEFAULT_PASSWORD };
+  var api = { parse: parse, DEFAULT_PASSWORD: DEFAULT_PASSWORD, DEFAULT_LABELS: DEFAULT_LABELS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else window.StudyTxt = api;
 })();
